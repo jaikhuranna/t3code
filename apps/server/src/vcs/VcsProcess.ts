@@ -119,7 +119,7 @@ const isTransientGitExit = (stderr: string) =>
  */
 const COMMAND_FAILURE_HINTS: ReadonlyArray<readonly [RegExp, string]> = [
   [
-    /permission denied \((?:publickey|password|keyboard-interactive)\)/,
+    /permission denied \([^)]*(?:publickey|password|keyboard-interactive)[^)]*\)/,
     "SSH authentication failed. Check that your SSH key is set up for this host, or use an HTTPS URL.",
   ],
   [
