@@ -164,20 +164,26 @@ describe("VcsProcess.run", () => {
 
   it.effect("includes a sanitized hint for SSH authentication failures", () =>
     Effect.gen(function* () {
-      const rawStderr = "git@github.com: Permission denied (publickey).";
-      const error = yield* run({
-        operation: "test.ssh-auth",
-        command: "node",
-        args: ["-e", "process.stderr.write(process.argv[1]); process.exit(128)", rawStderr],
-        cwd: process.cwd(),
-      }).pipe(Effect.flip);
+      const sshHint =
+        "SSH authentication failed. Check that your SSH key is set up for this host, or use an HTTPS URL.";
+      for (const rawStderr of [
+        "git@github.com: Permission denied (publickey).",
+        "git@gitlab.com: Permission denied (publickey,password).",
+        "Permission denied (keyboard-interactive,publickey).",
+      ]) {
+        const error = yield* run({
+          operation: "test.ssh-auth",
+          command: "node",
+          args: ["-e", "process.stderr.write(process.argv[1]); process.exit(128)", rawStderr],
+          cwd: process.cwd(),
+        }).pipe(Effect.flip);
 
-      expect(error).toMatchObject({
-        detail:
-          "SSH authentication failed. Check that your SSH key is set up for this host, or use an HTTPS URL.",
-        failureKind: "command-failed",
-      });
-      expect(error.message).not.toContain("publickey");
+        expect(error).toMatchObject({
+          detail: sshHint,
+          failureKind: "command-failed",
+        });
+        expect(error.message).not.toContain("publickey");
+      }
     }).pipe(provideLive),
   );
 
