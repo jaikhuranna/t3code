@@ -44,6 +44,7 @@ export function createWidgetRefresher<Id>(refresh: (id: Id) => Promise<unknown>)
   };
 }
 
+/** Drivers the widget knows how to draw, in column order. Anything else never gets a column. */
 const WIDGET_DRIVERS = ["codex", "claudeAgent"] as const;
 type WidgetDriver = (typeof WIDGET_DRIVERS)[number];
 
@@ -66,6 +67,11 @@ function visibleDrivers(
   return WIDGET_DRIVERS.filter((driver) => visible.has(driver));
 }
 
+/**
+ * Shape pooled limits into one column per visible driver, in the order given.
+ * A visible driver with no pool keeps its column as "No limits available", and
+ * freshness comes only from accounts that still have a column.
+ */
 function subscriptionUsageProps(
   accounts: readonly LimitAccount[],
   drivers: readonly WidgetDriver[],
