@@ -147,6 +147,24 @@ describe("scan cache round trip", () => {
     expect(decodeScanCache(JSON.parse(JSON.stringify(poisoned))).has("/a.jsonl")).toBe(false);
   });
 
+  it("drops an entry whose 1-hour cache writes fall outside the cache-write total", () => {
+    const encoded = encodeScanCache(cacheWith([["/a.jsonl", 100, [record()]]]));
+    const row = encoded.files["/a.jsonl"]!.r[0]!;
+    for (const cacheCreation1h of [-1, 11]) {
+      const poisoned = {
+        ...encoded,
+        files: {
+          "/a.jsonl": {
+            ...encoded.files["/a.jsonl"]!,
+            r: [[...row.slice(0, 11), cacheCreation1h]],
+          },
+        },
+      };
+
+      expect(decodeScanCache(JSON.parse(JSON.stringify(poisoned))).has("/a.jsonl")).toBe(false);
+    }
+  });
+
   it("rejects a document from the previous cache version", () => {
     const encoded = encodeScanCache(cacheWith([["/a.jsonl", 100, [record()]]]));
     const previous = { ...encoded, version: 4 };
