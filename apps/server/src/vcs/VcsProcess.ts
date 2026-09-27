@@ -119,23 +119,23 @@ const isTransientGitExit = (stderr: string) =>
  */
 const COMMAND_FAILURE_HINTS: ReadonlyArray<readonly [RegExp, string]> = [
   [
-    /permission denied \([^)]*(?:publickey|password|keyboard-interactive)[^)]*\)/,
+    /permission denied \([^)]*(?:publickey|password|keyboard-interactive)[^)]*\)/i,
     "SSH authentication failed. Check that your SSH key is set up for this host, or use an HTTPS URL.",
   ],
   [
-    /detected dubious ownership in repository/,
+    /detected dubious ownership in repository/i,
     "The directory is owned by a different user, which git refuses to trust. Fix the directory ownership or add it to git's safe.directory list.",
   ],
   [
-    /permission denied/,
+    /permission denied/i,
     "Permission denied. Check that the directory is owned by your user account and writable.",
   ],
-  [/not a git repository/, "The directory is not a git repository."],
+  [/not a git repository/i, "The directory is not a git repository."],
 ];
 
 /** Resolves a sanitized failure hint from stderr without retaining any of its content. */
 export const resolveCommandFailureHint = (stderr: string): string | undefined =>
-  COMMAND_FAILURE_HINTS.find(([pattern]) => pattern.test(stderr.toLowerCase()))?.[1];
+  COMMAND_FAILURE_HINTS.find(([pattern]) => pattern.test(stderr))?.[1];
 
 export const make = Effect.gen(function* () {
   const processRunner = yield* ProcessRunner.ProcessRunner;
