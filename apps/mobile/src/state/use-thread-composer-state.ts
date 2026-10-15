@@ -245,13 +245,15 @@ export function useThreadComposerState() {
   const draftMessage = selectedDraft?.text ?? "";
   const draftAttachments = selectedDraft?.attachments ?? [];
   const selectedThreadQueueCount = selectedThreadQueuedMessages.length;
-  const selectedThread = selectedThreadDetail ?? selectedThreadShell;
+  // The shell owns current metadata; the detail subscription can retain an older model.
+  const selectedThread = selectedThreadShell ?? selectedThreadDetail;
   const modelSelection = resolveThreadComposerModelSelection(
     selectedDraft,
     selectedThread?.modelSelection,
   );
   useEffect(() => {
-    if (!selectedThreadKey || !selectedThread?.modelSelection) return;
+    if (!selectedThreadKey || !selectedThread?.modelSelection || !selectedDraft?.modelSelection)
+      return;
     const draft = getComposerDraftSnapshot(selectedThreadKey);
     const resolved = resolveThreadComposerModelSelection(draft, selectedThread.modelSelection);
     if (
@@ -266,12 +268,7 @@ export function useThreadComposerState() {
         modelSelectionBase: selectedThread.modelSelection,
       });
     }
-  }, [
-    selectedThreadKey,
-    selectedThread?.modelSelection,
-    selectedDraft?.modelSelection,
-    selectedDraft?.modelSelectionBase,
-  ]);
+  }, [selectedThreadKey, selectedThread?.modelSelection, selectedDraft?.modelSelection]);
   const runtimeMode = selectedDraft?.runtimeMode ?? selectedThread?.runtimeMode ?? null;
   const selectedProvider = selectedEnvironmentRuntime?.serverConfig?.providers.find(
     (provider) => provider.instanceId === modelSelection?.instanceId,
@@ -400,7 +397,8 @@ export function useThreadComposerState() {
     }
 
     const modelSelection =
-      resolveThreadComposerModelSelection(draft, thread.modelSelection) ?? thread.modelSelection;
+      resolveThreadComposerModelSelection(draft, selectedThreadShell.modelSelection) ??
+      selectedThreadShell.modelSelection;
     const serverConfig = selectedEnvironmentRuntime?.serverConfig;
     if (
       selectedEnvironmentRuntime?.connectionState === "connected" &&
