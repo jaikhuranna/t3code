@@ -1,5 +1,6 @@
 import * as Dialog from "../../components/ui/Dialog";
 import type { ThreadRowProviderInstance } from "./thread-provider-instance";
+import { ThreadListDragRow } from "./ThreadListDrag";
 import {
   THREAD_LIST_V2_MONO_FONT as MONO_FONT,
   THREAD_LIST_V2_ROW_CONTENT_CLASS_NAME,
@@ -572,8 +573,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
     thread: EnvironmentThreadShell,
     direction: ThreadMoveDestination,
   ) => void;
-  /** Position flags for the card's section so the menu disables the move that
-      would fall off the end of the list. */
+  /** Available screen-reader adjustments within the card's section. */
   readonly canMoveUp?: boolean;
   readonly canMoveDown?: boolean;
   readonly onSwipeableWillOpen: (methods: SwipeableMethods) => void;
@@ -677,8 +677,6 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
     (enabled: boolean) => onSetThreadAutoSettle(thread, enabled),
     [onSetThreadAutoSettle, thread],
   );
-  const handleMoveUp = useCallback(() => onMoveThread?.(thread, "up"), [onMoveThread, thread]);
-  const handleMoveDown = useCallback(() => onMoveThread?.(thread, "down"), [onMoveThread, thread]);
   const handleArchive = useCallback(() => onArchiveThread(thread), [onArchiveThread, thread]);
 
   // Swipe: the v2 primary action is the lifecycle transition. Un-settling a
@@ -722,21 +720,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   const arrangementMenuItems = useMemo<MenuAction[]>(
     () => [
       ...(props.reorderSupported === true
-        ? [
-            { id: "arrange", title: "Arrange threads…", image: "line.3.horizontal" },
-            {
-              id: "move-up",
-              title: "Move up",
-              image: "arrow.up",
-              attributes: { disabled: props.canMoveUp !== true },
-            } satisfies MenuAction,
-            {
-              id: "move-down",
-              title: "Move down",
-              image: "arrow.down",
-              attributes: { disabled: props.canMoveDown !== true },
-            } satisfies MenuAction,
-          ]
+        ? [{ id: "arrange", title: "Arrange threads…", image: "line.3.horizontal" }]
         : []),
       ...(props.pinningSupported
         ? [
@@ -746,14 +730,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
           ]
         : []),
     ],
-    [
-      props.canMoveDown,
-      props.canMoveUp,
-      props.reorderSupported,
-      props.pinningSupported,
-      thread.pinnedAt,
-      variant,
-    ],
+    [props.reorderSupported, props.pinningSupported, thread.pinnedAt],
   );
   // A submenu with the current option checked, matching web. This is a
   // per-thread setting, not a lifecycle verb.
@@ -823,9 +800,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   const slimMenuActions = useMemo<MenuAction[]>(
     () => [
       SLIM_MENU_ACTIONS[0]!,
-      ...arrangementMenuItems.filter(
-        (action) => action.id !== "move-up" && action.id !== "move-down",
-      ),
+      ...arrangementMenuItems,
       ...titleMenuItems,
       ...autoSettleMenuItems,
       SLIM_MENU_ACTIONS[1]!,
@@ -861,8 +836,6 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       if (nativeEvent.event === "auto-settle:enabled") handleSetAutoSettle(true);
       if (nativeEvent.event === "auto-settle:disabled") handleSetAutoSettle(false);
       if (nativeEvent.event === "arrange") appAtomRegistry.set(threadArrangementOpenAtom, true);
-      if (nativeEvent.event === "move-up") handleMoveUp();
-      if (nativeEvent.event === "move-down") handleMoveDown();
       if (nativeEvent.event === "archive") handleArchive();
       if (nativeEvent.event === "rename") handleRename();
       if (nativeEvent.event === "regenerate-title") handleRegenerateTitle();
@@ -895,8 +868,6 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
       handleDelete,
       handleRegenerateTitle,
       handleRename,
-      handleMoveDown,
-      handleMoveUp,
       handlePin,
       handleSettle,
       handleSnooze,
@@ -1308,7 +1279,14 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   if (!canOperateThread) return rowContent(() => {});
 
   return (
-    <View collapsable={false}>
+    <ThreadListDragRow
+      thread={thread}
+      section={variant === "card" && !snoozedRow ? (pinnedRow ? "pinned" : "active") : null}
+      enabled={props.reorderSupported === true}
+      canMoveUp={props.canMoveUp === true}
+      canMoveDown={props.canMoveDown === true}
+      onStep={(direction) => onMoveThread?.(thread, direction)}
+    >
       {customSnoozeOpen && (
         <CustomSnoozeSheet onClose={() => setCustomSnoozeOpen(false)} onSnooze={handleSnooze} />
       )}
@@ -1362,6 +1340,6 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
           </Menu>
         )}
       </ThreadSwipeable>
-    </View>
+    </ThreadListDragRow>
   );
 });

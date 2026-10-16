@@ -1,3 +1,4 @@
+import { ThreadListDragProvider, useThreadListDrag } from "../threads/ThreadListDrag";
 import { AppActivityIndicator } from "../../components/ui/AppActivityIndicator";
 import { useAndroidControlSizing } from "../../components/ui/useAndroidControlSizing";
 import type { ThreadMoveDestination } from "../threads/threadOrder";
@@ -884,6 +885,14 @@ export function HomeScreen(props: HomeScreenProps) {
   );
   const v2KeyExtractor = useCallback((item: ThreadListV2ListItem) => item.key, []);
 
+  const threadDrag = useThreadListDrag({
+    listRef,
+    orderVersion: threadListV2Items.map((item) => item.type === "v2-thread"
+      ? `${item.key}:${item.item.variant}:${item.item.pinned}:${item.item.snoozed}` : item.key).join("|"),
+    onMove: props.onMoveThread,
+    onStart: handleScrollBeginDrag,
+  });
+
   // FlatList/LegendList treat a changed extraData identity as "re-render every
   // visible row", so an inline object literal would invalidate all rows on
   // every HomeScreen render — and the minute clock must stay out of it for
@@ -1050,7 +1059,8 @@ export function HomeScreen(props: HomeScreenProps) {
         {/* Shared with the iPad sidebar: cells are reused across data
             rebuilds and `itemsAreEqual` keeps a minute tick (or an unrelated
             shell update) from re-rendering untouched rows. */}
-        <SwipeableScrollGateProvider enabled={swipeEnabled} activation={swipeRowActivation}>
+        <ThreadListDragProvider drag={threadDrag}>
+        <SwipeableScrollGateProvider enabled={swipeEnabled && !threadDrag.dragging} activation={swipeRowActivation}>
           <GestureDetector gesture={homeScrollGesture}>
             <LegendList
               ref={listRef}
@@ -1092,6 +1102,11 @@ export function HomeScreen(props: HomeScreenProps) {
               keyboardDismissMode="on-drag"
               keyboardShouldPersistTaps="handled"
               {...scrollGateHandlers}
+              scrollEnabled={!threadDrag.dragging}
+              onScroll={(event) => {
+                scrollGateHandlers.onScroll(event);
+                threadDrag.onScroll(event);
+              }}
               scrollEventThrottle={16}
               contentContainerStyle={{
                 paddingLeft: (contentSideInsets?.left ?? 0) + (primaryColumn ? 8 : 0),
@@ -1106,6 +1121,7 @@ export function HomeScreen(props: HomeScreenProps) {
             />
           </GestureDetector>
         </SwipeableScrollGateProvider>
+        </ThreadListDragProvider>
       </View>
     </View>
   );
