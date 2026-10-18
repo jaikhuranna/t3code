@@ -281,9 +281,10 @@ export function MobileEnrichedMarkdownText(props: SelectableMarkdownTextProps) {
         : undefined;
 
     return (
+      // Markdown lives in a column: flexShrink would reduce its height when
+      // wrapped text or media grows, leaving native content outside its bubble.
       <View
         style={{
-          flexShrink: 1,
           minWidth: 0,
           marginTop: props.marginTop,
           marginBottom: props.marginBottom,
@@ -301,7 +302,7 @@ export function MobileEnrichedMarkdownText(props: SelectableMarkdownTextProps) {
               : undefined
           }
           linkRecognition={linkRecognition}
-          containerStyle={{ flexShrink: 1, minWidth: 0 }}
+          containerStyle={{ minWidth: 0 }}
           flavor="github"
           selectable
           selectionClipboard={selectionClipboard}
@@ -338,7 +339,7 @@ export function MobileEnrichedMarkdownText(props: SelectableMarkdownTextProps) {
       onPressAction={({ nativeEvent }) => {
         if (activeMenu) performMenuAction(activeMenu.url, nativeEvent.event);
       }}
-      style={{ flexShrink: 1, minWidth: 0 }}
+      style={{ minWidth: 0 }}
     >
       <MarkdownMenuAnchor renderMarkdown={renderMarkdown} />
     </Menu>
