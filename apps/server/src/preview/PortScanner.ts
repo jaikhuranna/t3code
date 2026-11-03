@@ -394,13 +394,20 @@ export const make = Effect.gen(function* PortDiscoveryMake() {
 
   const findSocketOwners = Effect.fn("PortDiscovery.findSocketOwners")(function* (
     inodes: ReadonlySet<string>,
+    terminalProcessIds: ReadonlySet<number>,
   ) {
     const owners = new Map<string, { pid: number; processName: string | null }>();
+    // Terminal processes go first so the servers we can attribute are found
+    // even when the walk budget runs out on a host with many open fds.
     const pids = (yield* fileSystem
       .readDirectory("/proc")
-      .pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []))).filter((entry) =>
-      /^\d+$/.test(entry),
-    );
+      .pipe(Effect.orElseSucceed((): ReadonlyArray<string> => [])))
+      .filter((entry) => /^\d+$/.test(entry))
+      .toSorted(
+        (left, right) =>
+          Number(terminalProcessIds.has(Number(right))) -
+          Number(terminalProcessIds.has(Number(left))),
+      );
     let budget = PROC_FD_WALK_LIMIT;
     for (const pidText of pids) {
       if (owners.size === inodes.size || budget <= 0) break;
@@ -438,9 +445,19 @@ export const make = Effect.gen(function* PortDiscoveryMake() {
     const listeners = tables.flatMap((table) =>
       Option.isSome(table) ? parseProcNetTcp(table.value) : [],
     );
-    const known = yield* Ref.get(socketOwnersRef);
-    const knownMisses = yield* Ref.get(socketOwnerMissesRef);
     const inodes = new Set(listeners.map((listener) => listener.inode));
+    // A listening socket can outlive the process that opened it (fork, then
+    // exit), so a cached owner is kept only while its process is alive.
+    const cached = [...(yield* Ref.get(socketOwnersRef))].filter(([inode]) => inodes.has(inode));
+    const alivePids = new Set(
+      yield* Effect.filter(
+        new Set(cached.map(([, owner]) => owner.pid)),
+        (pid) => fileSystem.exists(`/proc/${pid}`).pipe(Effect.orElseSucceed(() => false)),
+        { concurrency: 16 },
+      ),
+    );
+    const known = new Map(cached.filter(([, owner]) => alivePids.has(owner.pid)));
+    const knownMisses = yield* Ref.get(socketOwnerMissesRef);
     // Listeners rarely change, so the fd walk runs only for sockets without a
     // confirmed owner, and gives up on one after a few walks miss it (another
     // user's process, or one that exited mid-walk).
@@ -449,8 +466,11 @@ export const make = Effect.gen(function* PortDiscoveryMake() {
         (inode) => !known.has(inode) && (knownMisses.get(inode) ?? 0) < SOCKET_OWNER_ATTEMPTS,
       ),
     );
-    const found = unseen.size === 0 ? new Map() : yield* findSocketOwners(unseen);
-    const owners = new Map([...known, ...found].filter(([inode]) => inodes.has(inode)));
+    const found =
+      unseen.size === 0
+        ? new Map()
+        : yield* findSocketOwners(unseen, new Set(terminalByProcessId.keys()));
+    const owners = new Map([...known, ...found]);
     const misses = new Map([...knownMisses].filter(([inode]) => inodes.has(inode)));
     for (const inode of unseen) {
       if (!found.has(inode)) misses.set(inode, (misses.get(inode) ?? 0) + 1);
@@ -726,11 +746,12 @@ export const make = Effect.gen(function* PortDiscoveryMake() {
         yield* probeWebServers(listeners ?? [], configuredUrls),
       );
     }
+    // /proc reuses known socket owners, so a steady-state Linux scan reads two
+    // files. lsof walks every process's fds each call (~0.3s CPU on a desktop).
+    const fromProc = yield* scanProcListeners(terminalByProcessId);
+    if (fromProc !== null) return yield* probeWebServers(fromProc, configuredUrls);
+    if (yield* Ref.get(lsofMissingRef)) return yield* probeWebServers([], configuredUrls);
     const recoverLsofProbeFailure = recoverProcessProbeFailure("lsof");
-    if (yield* Ref.get(lsofMissingRef)) {
-      const fromProc = yield* scanProcListeners(terminalByProcessId);
-      return yield* probeWebServers(fromProc ?? [], configuredUrls);
-    }
     const lsofResult = yield* processRunner
       .run({
         command: "lsof",
@@ -752,9 +773,7 @@ export const make = Effect.gen(function* PortDiscoveryMake() {
           ProcessTimeoutError: recoverLsofProbeFailure,
         }),
       );
-    if (lsofResult !== null) return yield* probeWebServers(lsofResult, configuredUrls);
-    const fromProc = yield* scanProcListeners(terminalByProcessId);
-    return yield* probeWebServers(fromProc ?? [], configuredUrls);
+    return yield* probeWebServers(lsofResult ?? [], configuredUrls);
   });
 
   const scanSnapshot = Effect.fn("PortDiscovery.scanSnapshot")(

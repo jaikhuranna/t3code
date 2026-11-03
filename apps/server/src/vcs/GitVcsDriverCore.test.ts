@@ -3803,6 +3803,31 @@ it.layer(layerTest)("GitVcsDriver core integration", (it) => {
       }),
     );
 
+    it.effect("counts a staged edit whose working tree matches the index", () =>
+      Effect.gen(function* () {
+        const cwd = yield* makeTmpDir();
+        yield* initRepoWithCommit(cwd);
+        yield* writeTextFile(cwd, "README.md", "# test\nstaged line\n");
+        yield* git(cwd, ["add", "README.md"]);
+        const driver = yield* GitVcsDriver.GitVcsDriver;
+
+        const staged = yield* driver.statusDetailsLocal(cwd);
+        assert.deepEqual(staged.workingTree.files, [
+          { path: "README.md", insertions: 1, deletions: 0 },
+        ]);
+
+        yield* git(cwd, ["commit", "-m", "commit staged line"]);
+        yield* writeTextFile(cwd, "untracked.txt", "new\n");
+        const untrackedOnly = yield* driver.statusDetailsLocal(cwd);
+        assert.deepEqual(untrackedOnly.workingTree, {
+          rootPath: untrackedOnly.workingTree.rootPath,
+          files: [{ path: "untracked.txt", insertions: 0, deletions: 0 }],
+          insertions: 0,
+          deletions: 0,
+        });
+      }),
+    );
+
     it.effect("reports staged file counts on unborn HEAD without failing", () =>
       Effect.gen(function* () {
         const cwd = yield* makeTmpDir();

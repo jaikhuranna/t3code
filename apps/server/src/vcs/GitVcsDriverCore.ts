@@ -2080,6 +2080,12 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
       Effect.catchTags({ GitCommandError: () => Effect.succeed(null) }),
     );
     const statusCacheKey = repositoryPaths?.gitCommonDir;
+    // Ordinary, rename, and unmerged records are the tracked changes. Without
+    // one diff-index has nothing to count, and on a large clean repository it
+    // costs almost as much as the status itself.
+    const hasTrackedChanges = statusResult.stdout
+      .split("\0")
+      .some((record) => /^[12u] /.test(record));
     const [numstatEntries, defaultBranch, hasPrimaryRemote] = yield* Effect.all(
       [
         // Plumbing, because porcelain `git diff` rewrites the index even with
@@ -2127,6 +2133,8 @@ export const makeGitVcsDriverCore = Effect.fn("makeGitVcsDriverCore")(function* 
               }),
             );
           }),
+          Effect.when(Effect.succeed(hasTrackedChanges)),
+          Effect.map(Option.getOrElse(() => [])),
         ),
         statusCacheKey
           ? Cache.get(defaultBranchCache, statusCacheKey).pipe(Effect.orElseSucceed(() => null))

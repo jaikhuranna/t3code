@@ -679,7 +679,7 @@ const PROC_NET_TCP6 = `  sl  local_address                         remote_addres
 `;
 
 effectIt.effect(
-  "reads Linux listeners from /proc when lsof is missing, and stops spawning it",
+  "reads Linux listeners from /proc without spawning lsof, walking terminal processes first",
   () => {
     let lsofSpawns = 0;
     const fdWalks: string[] = [];
@@ -687,19 +687,24 @@ effectIt.effect(
       "/proc/net/tcp": PROC_NET_TCP,
       "/proc/net/tcp6": PROC_NET_TCP6,
       "/proc/4242/comm": "python3\n",
+      "/proc/77/comm": "node\n",
     };
-    const procFds: Record<string, Record<string, string>> = {
+    let procFds: Record<string, Record<string, string>> = {
       "4242": { "0": "/dev/null", "3": "socket:[5001]" },
       "77": { "5": "socket:[9999]" },
     };
     const missing = FileSystem.makeNoop({});
     const fileSystem = FileSystem.layerNoop({
+      exists: (path) => Effect.succeed(Object.hasOwn(procFds, path.slice("/proc/".length))),
       readFileString: (path) => {
         const content = procFiles[path];
         return content === undefined ? missing.readFileString(path) : Effect.succeed(content);
       },
       readDirectory: (path) => {
-        if (path === "/proc") return Effect.succeed(["self", "77", "4242"]);
+        if (path === "/proc") {
+          const pids = Object.keys(procFds).toSorted((left, right) => Number(left) - Number(right));
+          return Effect.succeed(["self", ...pids]);
+        }
         const pid = /^\/proc\/(\d+)\/fd$/.exec(path)?.[1];
         const fds = pid === undefined ? undefined : procFds[pid];
         if (pid === undefined || fds === undefined) return missing.readDirectory(path);
@@ -724,19 +729,31 @@ effectIt.effect(
       fetchFn,
       fileSystem,
     );
+    const owners = (servers: ReadonlyArray<DiscoveredLocalServer>) =>
+      servers.map(({ port, pid, processName }) => ({ port, pid, processName }));
 
     return Effect.gen(function* () {
       const scanner = yield* ownedScanner([4242]);
-      const first = yield* scanner.scan();
-      expect(first.map(({ port, pid, processName }) => ({ port, pid, processName }))).toEqual([
+      expect(owners(yield* scanner.scan())).toEqual([
         { port: 8765, pid: 4242, processName: "python3" },
       ]);
+      // The terminal's process is walked before lower pids.
+      expect(fdWalks).toEqual(["4242", "77"]);
+      // Unowned listeners are retried a few times, then the cached owner is reused.
       yield* scanner.scan();
-      expect(lsofSpawns).toBe(1);
-      expect(fdWalks).toEqual(["77", "4242", "77", "4242"]);
       yield* scanner.scan();
       yield* scanner.scan();
-      expect(fdWalks).toEqual(["77", "4242", "77", "4242", "77", "4242"]);
+      expect(fdWalks).toHaveLength(6);
+
+      // The opener exits and a forked child keeps the listening socket.
+      procFds = { "77": { "5": "socket:[5001]" } };
+      yield* scanner.registerTerminalProcesses({
+        threadId: "scanner-thread",
+        terminalId: "scanner-terminal",
+        processIds: [77],
+      });
+      expect(owners(yield* scanner.scan())).toEqual([{ port: 8765, pid: 77, processName: "node" }]);
+      expect(lsofSpawns).toBe(0);
     }).pipe(Effect.provide(layer));
   },
 );
