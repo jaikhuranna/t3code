@@ -173,7 +173,7 @@ import {
   selectThreadPreviewMiniPlayer,
   usePreviewMiniPlayerStore,
 } from "../previewMiniPlayerStore";
-import { threadPullRequestPanelTarget } from "./pullRequest/pullRequestDetail.logic";
+import { threadPullRequestPanelTargets } from "./pullRequest/pullRequestDetail.logic";
 import { LinkPullRequestDialogHost } from "./pullRequest/LinkPullRequestDialog";
 import { GuestPendingMessages } from "./chat/GuestShareControls";
 import { useDeviceState } from "~/state/device";
@@ -2312,14 +2312,14 @@ export default function ChatView(props: ChatViewProps) {
     if (activeThreadReferenceCopyTarget === null) return;
     void copyThreadReference(activeThreadReferenceCopyTarget);
   };
-  const pullRequestPanelTarget = activeThread
-    ? threadPullRequestPanelTarget({
+  const pullRequestPanelTargets = activeThread
+    ? threadPullRequestPanelTargets({
         projectId: activeThread.projectId,
         pullRequests: visiblePullRequests,
         linkedPullRequest: linkedThreadPullRequest,
         branchPullRequest: activeThreadShell?.branchPullRequest ?? activeThread.branchPullRequest,
       })
-    : null;
+    : [];
   const {
     activateRightPanelSurfaceStable,
     addDeviceSurfaceStable,
@@ -2347,7 +2347,7 @@ export default function ChatView(props: ChatViewProps) {
     activePreviewState,
     deviceState,
     deviceStateLoaded,
-    pullRequestPanelTarget,
+    pullRequestPanelTargets,
     threadPanelPresentation,
     isServerThread,
     embedded,
@@ -2367,7 +2367,7 @@ export default function ChatView(props: ChatViewProps) {
     onDiffPanelOpen,
     closeRightPanelSurface,
   });
-  const pullRequestSurfaceAvailable = supportsPullRequests && pullRequestPanelTarget !== null;
+  const pullRequestSurfaceAvailable = supportsPullRequests && pullRequestPanelTargets.length > 0;
   const {
     acknowledgeActiveThreadWoke,
     activeBranchMismatchKey,
