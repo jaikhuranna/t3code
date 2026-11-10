@@ -131,6 +131,14 @@
       "types": "./src/htmlRender.ts",
       "import": "./src/htmlRender.ts"
     },
+    "./htmlRenderSectionLabels": {
+      "types": "./src/htmlRenderSectionLabels.ts",
+      "import": "./src/htmlRenderSectionLabels.ts"
+    },
+    "./htmlRenderSelectionBridge": {
+      "types": "./src/htmlRenderSelectionBridge.ts",
+      "import": "./src/htmlRenderSelectionBridge.ts"
+    },
     "./favicon": {
       "types": "./src/favicon.ts",
       "import": "./src/favicon.ts"

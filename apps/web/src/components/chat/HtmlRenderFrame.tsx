@@ -5,7 +5,7 @@ import {
   htmlRenderFrameHeight,
   type HtmlRenderReference,
 } from "@t3tools/shared/htmlRender";
-import { Maximize2Icon } from "lucide-react";
+import { Maximize2Icon, SquareDashedMousePointerIcon } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { useAssetUrlRefresh, useAssetUrlState } from "~/assets/assetUrls";
@@ -15,9 +15,16 @@ import { Button } from "../ui/button";
 import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { HtmlRenderDialog } from "./HtmlRenderDialog";
+import {
+  htmlSectionCommand,
+  observeHtmlSectionPickerExit,
+  readHtmlSectionState,
+  type HtmlSectionState,
+} from "~/lib/htmlRenderSection";
 import { observeResize } from "~/lib/observeResize";
 
 const MIN_URL_LIFE_MS = 5 * 60_000;
+const SECTION_FRAME = "iframe[data-html-selection-bridge]";
 
 export function HtmlRenderFrame(props: {
   readonly environmentId: EnvironmentId;
@@ -89,8 +96,55 @@ export function HtmlRenderFrame(props: {
     );
   }, [cacheFailed, cachedExpiresAt, cachedUrl, refresh, src]);
 
+  // Mirrors the in-frame section picker. A reload starts a fresh page, so the
+  // picker is off until the frame reports otherwise.
+  const [sectionState, setSectionState] = useState<HtmlSectionState | null>(null);
+  const sectionActive = sectionState?.active ?? false;
+  const sectionFrame = () =>
+    boxRef.current?.querySelector<HTMLIFrameElement>(SECTION_FRAME) ?? null;
+  useEffect(() => {
+    if (src === null) return;
+    const box = boxRef.current;
+    const frame = box?.querySelector<HTMLIFrameElement>(SECTION_FRAME);
+    if (!box || !frame) return;
+    let active = false;
+    const onMessage = (event: MessageEvent) => {
+      const state = readHtmlSectionState(event, frame);
+      if (state) {
+        active = state.active;
+        setSectionState(state);
+      }
+    };
+    const onLoad = () => {
+      active = false;
+      setSectionState(null);
+      htmlSectionCommand(frame, "status");
+    };
+    window.addEventListener("message", onMessage);
+    box.addEventListener("t3-html-selection-ready", onLoad);
+    htmlSectionCommand(frame, "status");
+    return () => {
+      window.removeEventListener("message", onMessage);
+      box.removeEventListener("t3-html-selection-ready", onLoad);
+      if (active) htmlSectionCommand(frame, "stop");
+    };
+  }, [src]);
+
+  const sectionSelected = sectionState?.selected ?? false;
+  useEffect(() => {
+    const box = boxRef.current;
+    const frame = box?.querySelector<HTMLIFrameElement>(SECTION_FRAME);
+    if (!sectionActive || !box || !frame) return;
+    return observeHtmlSectionPickerExit({ box, frame, selected: sectionSelected });
+  }, [sectionActive, sectionSelected]);
+
   return (
-    <div ref={boxRef} className="group/html-render relative" style={{ height }}>
+    <div
+      ref={boxRef}
+      className="group/html-render relative"
+      style={{ height }}
+      data-section-picking={sectionActive || undefined}
+    >
       {src !== null ? (
         <>
           <HtmlRenderDocument
@@ -100,8 +154,38 @@ export function HtmlRenderFrame(props: {
             className="block size-full"
             onContentHeight={setContentHeight}
             onFullscreenChange={onFullscreenChange}
+            selectionBridge
           />
-          <div className="absolute end-2 top-2 flex gap-1 opacity-0 transition-opacity duration-150 focus-within:opacity-100 group-hover/html-render:opacity-100 pointer-coarse:opacity-100">
+          <div className="absolute end-2 top-2 flex items-center gap-1 opacity-0 transition-opacity duration-150 focus-within:opacity-100 group-hover/html-render:opacity-100 group-data-section-picking/html-render:opacity-100 pointer-coarse:opacity-100">
+            {sectionActive && !sectionState?.selected ? (
+              <span className="surface-glass rounded-full border border-border/60 px-2 py-0.5 text-foreground text-xs shadow-sm">
+                Choose a section · Esc to cancel
+              </span>
+            ) : null}
+            {sectionState !== null && (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      aria-label="Cite section"
+                      aria-pressed={sectionActive}
+                      data-pressed={sectionActive || undefined}
+                      size="icon-xs"
+                      variant="glass"
+                      onClick={() => {
+                        const frame = sectionFrame();
+                        if (frame) htmlSectionCommand(frame, sectionActive ? "stop" : "start");
+                      }}
+                    />
+                  }
+                >
+                  <SquareDashedMousePointerIcon className="size-3.5" />
+                </TooltipTrigger>
+                <TooltipPopup side="left">
+                  {sectionActive ? "Stop choosing a section" : "Cite a section"}
+                </TooltipPopup>
+              </Tooltip>
+            )}
             <Tooltip>
               <TooltipTrigger
                 render={
@@ -110,6 +194,9 @@ export function HtmlRenderFrame(props: {
                     size="icon-xs"
                     variant="glass"
                     onClick={async () => {
+                      // Citing stays inline; the full screen page has no picker.
+                      const frame = sectionFrame();
+                      if (sectionActive && frame) htmlSectionCommand(frame, "stop");
                       const url =
                         srcExpiresAt.current - Date.now() > MIN_URL_LIFE_MS
                           ? src
@@ -140,7 +227,10 @@ export function HtmlRenderFrame(props: {
           ) : null}
         </>
       ) : failed ? (
-        <p className="flex size-full items-center justify-center text-muted-foreground text-xs">
+        <p
+          data-html-render-error
+          className="flex size-full items-center justify-center text-muted-foreground text-xs"
+        >
           Unable to load {title}
         </p>
       ) : null}

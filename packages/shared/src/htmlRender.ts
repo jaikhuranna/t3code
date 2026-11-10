@@ -448,7 +448,15 @@ const blankNonMarkup = (html: string) => {
 
 export function injectHtmlRenderBootstrap(html: string): string {
   const scan = blankNonMarkup(html);
-  const markup = bootstrapMarkup(scan);
+  return injectHtmlRenderHead(html, bootstrapMarkup(scan), scan);
+}
+
+/** Inserts host-owned markup ahead of an agent page's head content. */
+export function injectHtmlRenderHead(
+  html: string,
+  markup: string,
+  scan = blankNonMarkup(html),
+): string {
   const headOpen = /<head(?:\s[^>]*)?>/i.exec(scan);
   if (headOpen) {
     const at = headOpen.index + headOpen[0].length;

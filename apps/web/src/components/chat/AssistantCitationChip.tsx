@@ -59,6 +59,7 @@ export function AssistantCitationChip({
   const commentOpen = commentEditor?.open ?? false;
   const sourceAnchor = commentEditor?.sourceAnchor;
   const activeSourceAnchor = sourceAnchor === unavailableSourceAnchor ? undefined : sourceAnchor;
+  const [sourcePositionRevision, setSourcePositionRevision] = useState(0);
   useEffect(() => {
     if (!commentOpen) draftCommentRef.current = null;
   }, [commentOpen]);
@@ -87,11 +88,14 @@ export function AssistantCitationChip({
       anchor,
       citation,
       onUnavailable: onSourceUnavailable,
+      onPositionChange: () => setSourcePositionRevision((revision) => revision + 1),
     });
   }, [citation, commentOpen, sourceAnchor, unavailableSourceAnchor]);
   const popupAnchor = activeSourceAnchor
     ? {
         contextElement: activeSourceAnchor.source,
+        // Keep the virtual anchor fresh when the opaque frame reports new geometry.
+        revision: sourcePositionRevision,
         getBoundingClientRect: () => {
           const rects = activeSourceAnchor.range.getClientRects();
           const rect =
