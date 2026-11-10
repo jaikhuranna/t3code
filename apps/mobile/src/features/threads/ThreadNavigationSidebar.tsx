@@ -595,6 +595,7 @@ function ThreadNavigationSidebarPane(
   const listRef = useRef<LegendListRef>(null);
   const threadDrag = useThreadListDrag({
     listRef,
+    handleInset: Platform.OS === "android" ? 0 : 8,
     orderVersion: listItems
       .map((item) =>
         item.type === "v2-thread"

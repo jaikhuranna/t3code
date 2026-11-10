@@ -16,6 +16,7 @@ import {
 import {
   Animated,
   View,
+  type ViewInstance,
   type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -33,7 +34,7 @@ type Row = {
   thread: EnvironmentThreadShell;
   section: "pinned" | "active";
   enabled: boolean;
-  view: View;
+  view: ViewInstance;
 };
 type MeasuredRow = Row & { key: string; top: number; left: number; width: number; height: number };
 type Drag = {
@@ -46,6 +47,7 @@ type Drag = {
 export function useThreadListDrag(input: {
   listRef: RefObject<LegendListRef | null>;
   orderVersion: string;
+  handleInset: number;
   onMove: (thread: EnvironmentThreadShell, destination: ThreadMoveDestination) => Promise<boolean>;
   onStart: () => void;
 }) {
@@ -56,7 +58,7 @@ export function useThreadListDrag(input: {
   useLayoutEffect(() => {
     latest.current = { ...input, disabled };
   });
-  const viewport = useRef<View>(null);
+  const viewport = useRef<ViewInstance>(null);
   const bounds = useRef({ top: 0, width: 0, height: 0, offset: 0, minimum: 0, maximum: 0 });
   const rows = useRef(new Map<string, Row>());
   const measured = useRef(new Map<string, MeasuredRow>());
@@ -153,7 +155,7 @@ export function useThreadListDrag(input: {
             !touch ||
             event.numberOfTouches !== 1 ||
             latest.current.disabled ||
-            touch.x < bounds.current.width - 64
+            touch.x < bounds.current.width - latest.current.handleInset - 44
           ) {
             generation.current += 1;
             runOnUI(manager.fail)();
@@ -322,7 +324,7 @@ export function ThreadListDragRow(props: {
   children: ReactNode;
 }) {
   const context = useContext(DragContext);
-  const view = useRef<View>(null);
+  const view = useRef<ViewInstance>(null);
   const key = scopedThreadKey(props.thread.environmentId, props.thread.id);
   const register = context?.register;
   useEffect(() => {
